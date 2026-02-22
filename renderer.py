@@ -28,10 +28,6 @@ def _red(t: str, c: bool) -> str:
     return _c("\033[31m", t, c)
 
 
-def _cyan(t: str, c: bool) -> str:
-    return _c("\033[36m", t, c)
-
-
 def _bold(t: str, c: bool) -> str:
     return _c(BOLD, t, c)
 
@@ -188,13 +184,17 @@ def render(
     lines.append(f"  {t('nearest_station', lang) + ':':<{w1}}{_bold(nearest.name, c)}")
     if nearest.region and nearest.region != nearest.name:
         lines.append(f"  {t('region', lang) + ':':<{w1}}{nearest.region}")
-    lines.append(f"  {t('distance', lang) + ':':<{w1}}{nearest_dist:.1f} {t('km', lang)}")
+    lines.append(
+        f"  {t('distance', lang) + ':':<{w1}}{nearest_dist:.1f} {t('km', lang)}"
+    )
     lines.append("")
 
     dr_str = _fmt_dr(nearest.dose_rate, nearest.uncertainty, c)
     lines.append(f"  {t('dose_rate', lang) + ':':<{w2}}{_bold(dr_str, c)}")
     lines.append(f"  {t('level', lang) + ':':<{w2}}{level_str}")
-    lines.append(f"  {_bar(nearest.dose_rate, width=30, use_colour=c)}  {HIGH_MIN} µSv/h")
+    lines.append(
+        f"  {_bar(nearest.dose_rate, width=30, use_colour=c)}  {HIGH_MIN} µSv/h"
+    )
     lines.append("")
 
     # Nearby stations table
