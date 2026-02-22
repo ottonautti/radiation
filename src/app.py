@@ -8,27 +8,26 @@ Usage (terminal):
 
 from typing import Optional
 from urllib.parse import urlparse
+from xml.etree.ElementTree import ParseError
 
 import asgi
-from js import Response as JsResponse
+import fmi
+import geo
+import renderer
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
+from workers import Response as WorkersResponse
 from workers import WorkerEntrypoint
-
-import fmi
-import geo
-import renderer
 
 _UA_TOKENS = ("curl", "wget", "httpie", "http/", "python-httpx", "python-requests")
 
 
 def _wants_colour(request: Request) -> bool:
+    """Determine if the client likely supports ANSI colour codes."""
     ua = request.headers.get("user-agent", "").lower()
-    return any(
-        t in ua for t in ("curl", "wget", "httpie", "http/", "python-httpx", "python-requests")
-    )
+    return any(t in ua for t in _UA_TOKENS)
 
 
 def _detect_lang(request: Request) -> str:
@@ -45,10 +44,6 @@ def _client_ip(request: Request) -> str:
         return forwarded.split(",")[0].strip()
     return request.client.host if request.client else ""
 
-
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
 
 _ERRORS = {
     "fi": {
@@ -97,7 +92,7 @@ async def _handle(request: Request, location: str) -> str:
 
     try:
         stations, data_ts = await fmi.fetch_stations()
-    except Exception as exc:
+    except (ParseError, ValueError, OSError) as exc:
         return renderer.render_error(f"{err['fetch_failed']}: {exc}", use_colour, lang)
 
     if not stations:
@@ -108,7 +103,10 @@ async def _handle(request: Request, location: str) -> str:
     label = ""
 
     if location:
-        lat, lon, display = await geo.geocode_place(location)
+        try:
+            lat, lon, display = await geo.geocode_place(location)
+        except (ValueError, KeyError, IndexError, TypeError, OSError):
+            return renderer.render_error(err["geocode_failed"].format(location), use_colour, lang)
         if lat is None:
             return renderer.render_error(err["geocode_failed"].format(location), use_colour, lang)
         # Use just the first meaningful part of the Nominatim display name
@@ -122,7 +120,10 @@ async def _handle(request: Request, location: str) -> str:
             label = cf_city or err["your_location"]
         else:
             ip = _client_ip(request)
-            lat, lon, city = await geo.geolocate_ip(ip)
+            try:
+                lat, lon, city = await geo.geolocate_ip(ip)
+            except (ValueError, KeyError, IndexError, TypeError, OSError):
+                lat, lon, city = None, None, ""
             if lat is None:
                 lat, lon, label = 60.1699, 24.9384, err["default_location"]
             else:
@@ -132,11 +133,7 @@ async def _handle(request: Request, location: str) -> str:
     return renderer.render(label, ranked, use_colour=use_colour, timestamp=data_ts, lang=lang)
 
 
-# ---------------------------------------------------------------------------
-# Cloudflare Worker entry point
-# ---------------------------------------------------------------------------
-
-
+# discovered by the CF Workers runtime by name convention
 class Default(WorkerEntrypoint):
     async def fetch(self, request):
         fmi.USE_MOCK = bool(getattr(self.env, "RADIATION_MOCK", False))
@@ -150,13 +147,11 @@ class Default(WorkerEntrypoint):
 
         # Reconstruct response with Cache-Control so CF's CDN caches it at the edge
         body = await response.text()
-        return JsResponse.new(
+        return WorkersResponse(
             body,
-            {
-                "status": response.status,
-                "headers": {
-                    "Content-Type": "text/plain; charset=utf-8",
-                    "Cache-Control": f"public, max-age={fmi.TTL}",
-                },
+            status=response.status,
+            headers={
+                "Content-Type": "text/plain; charset=utf-8",
+                "Cache-Control": f"public, max-age={fmi.TTL}",
             },
         )

@@ -105,5 +105,4 @@ async def fetch_stations() -> tuple[list[Station], str]:
     if USE_MOCK:
         return _parse(mock_fmi.XML)
     resp = await fetch(FMI_URL)
-    xml = await resp.text()
-    return _parse(xml)
+    return _parse(await resp.text())

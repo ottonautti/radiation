@@ -32,3 +32,7 @@ https://developers.cloudflare.com/workers/runtime-apis/nodejs/
 
 Retrieve API references and limits from:
 `/kv/` · `/r2/` · `/d1/` · `/durable-objects/` · `/queues/` · `/vectorize/` · `/workers-ai/` · `/agents/`
+
+## Pyodide-included packages
+The packages listed are included in the Pyodide runtime, and should be preferred in app architecture: 
+https://pyodide.org/en/stable/usage/packages-in-pyodide.html
