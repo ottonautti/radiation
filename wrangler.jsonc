@@ -1,0 +1,13 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "radiation",
+	"main": "app.py",
+	"compatibility_date": "2025-11-02",
+	"compatibility_flags": [
+		"python_workers",
+		"python_dedicated_snapshot"
+	],
+	"observability": {
+		"enabled": true
+	}
+}

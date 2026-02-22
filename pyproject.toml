@@ -1,0 +1,15 @@
+[project]
+name = "radiation"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "webtypy>=0.1.7",
+    "fastapi",
+    "httpx",
+]
+
+[dependency-groups]
+dev = [
+    "workers-py",
+    "workers-runtime-sdk",
+]

@@ -8,12 +8,12 @@ Usage (terminal):
 
 import asyncio
 import time
-from contextlib import asynccontextmanager
 from typing import Optional
 
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse
+from workers import WorkerEntrypoint
 
 import fmi
 import geo
@@ -28,18 +28,9 @@ _cache_ts: float = 0.0
 _cache_data_ts: str = ""
 CACHE_TTL = 300  # seconds
 
-_http_client: Optional[httpx.AsyncClient] = None
+_http_client = httpx.AsyncClient()
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    global _http_client
-    _http_client = httpx.AsyncClient()
-    yield
-    await _http_client.aclose()
-
-
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 
 
 async def _get_stations() -> tuple[list[fmi.Station], str]:
@@ -60,6 +51,9 @@ def _wants_colour(request: Request) -> bool:
 
 
 def _client_ip(request: Request) -> str:
+    cf_ip = request.headers.get("cf-connecting-ip")
+    if cf_ip:
+        return cf_ip
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
         return forwarded.split(",")[0].strip()
@@ -104,13 +98,30 @@ async def _handle(request: Request, location: str) -> str:
         # Use just the first meaningful part of the Nominatim display name
         label = display.split(",")[0].strip() if display else location
     else:
-        ip = _client_ip(request)
-        lat, lon, city = await geo.geolocate_ip(ip, _http_client)
-        if lat is None:
-            # Fall back to Helsinki if geolocation fails
-            lat, lon, label = 60.1699, 24.9384, "Helsinki (default)"
+        cf_lat = request.headers.get("cf-iplatitude")
+        cf_lon = request.headers.get("cf-iplongitude")
+        cf_city = request.headers.get("cf-ipcity")
+        if cf_lat and cf_lon:
+            lat, lon = float(cf_lat), float(cf_lon)
+            label = cf_city or "Your location"
         else:
-            label = city or ip
+            ip = _client_ip(request)
+            lat, lon, city = await geo.geolocate_ip(ip, _http_client)
+            if lat is None:
+                # Fall back to Helsinki if geolocation fails
+                lat, lon, label = 60.1699, 24.9384, "Helsinki (default)"
+            else:
+                label = city or ip
 
     ranked = geo.nearest_stations(lat, lon, stations, n=6)
     return renderer.render(label, ranked, use_colour=use_colour, timestamp=data_ts)
+
+
+# ---------------------------------------------------------------------------
+# Cloudflare Worker entry point
+# ---------------------------------------------------------------------------
+
+class Default(WorkerEntrypoint):
+    async def fetch(self, request):
+        import asgi
+        return await asgi.fetch(app, request.js_object, self.env)

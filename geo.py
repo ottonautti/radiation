@@ -32,18 +32,20 @@ async def geolocate_ip(ip: str, client: httpx.AsyncClient) -> tuple[Optional[flo
 
 
 async def geocode_place(place: str, client: httpx.AsyncClient) -> tuple[Optional[float], Optional[float], str]:
-    """Geocode a place name via Nominatim, return (lat, lon, display_name)."""
+    """Geocode a place name via Photon (OSM-based), return (lat, lon, display_name)."""
     try:
         resp = await client.get(
-            "https://nominatim.openstreetmap.org/search",
-            params={"q": place, "format": "json", "limit": 1},
+            "https://photon.komoot.io/api/",
+            params={"q": place, "lang": "en", "limit": 1},
             headers={"User-Agent": "radiation.wttr / geocode"},
             timeout=8,
         )
-        results = resp.json()
-        if results:
-            r = results[0]
-            return float(r["lat"]), float(r["lon"]), r.get("display_name", place)
+        data = resp.json()
+        features = data.get("features", [])
+        if features:
+            coords = features[0]["geometry"]["coordinates"]  # GeoJSON: [lon, lat]
+            props = features[0].get("properties", {})
+            return coords[1], coords[0], props.get("name", place)
     except Exception:
         pass
     return None, None, ""
