@@ -16,7 +16,7 @@
 	},
 	"routes": [
 		{
-			"pattern": "priimus.consulting",
+			"pattern": "radiation.priimus.consulting",
 			"custom_domain": true
 		}
 	]

@@ -7,11 +7,10 @@ Usage (terminal):
 """
 
 from typing import Optional
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 import asgi
 from js import Response as JsResponse
-from js import caches
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
@@ -21,7 +20,6 @@ from workers import WorkerEntrypoint
 import fmi
 import geo
 import renderer
-
 
 _UA_TOKENS = ("curl", "wget", "httpie", "http/", "python-httpx", "python-requests")
 
@@ -144,27 +142,15 @@ class Default(WorkerEntrypoint):
         fmi.USE_MOCK = bool(getattr(self.env, "RADIATION_MOCK", False))
 
         parsed = urlparse(request.url)
-
-        # Root path is IP-specific; mock responses are ephemeral – skip caching
-        if fmi.USE_MOCK or parsed.path == "/":
-            return await asgi.fetch(app, request.js_object, self.env)
-
-        # Normalise the two dimensions that vary the rendered output
-        qs = parse_qs(parsed.query)
-        lang = qs["lang"][0] if "lang" in qs else "fi"
-        ua = (request.headers.get("User-Agent") or "").lower()
-        colour = "1" if any(tok in ua for tok in _UA_TOKENS) else "0"
-        cache_key = f"https://radiation-cache{parsed.path}?lang={lang}&_c={colour}"
-
-        cache = caches.default
-        cached = await cache.match(cache_key)
-        if cached is not None:
-            return cached
-
         response = await asgi.fetch(app, request.js_object, self.env)
 
-        body = await response.clone().text()
-        cacheable = JsResponse.new(
+        # Root path is IP-specific; mock responses are ephemeral – no caching
+        if fmi.USE_MOCK or parsed.path == "/":
+            return response
+
+        # Reconstruct response with Cache-Control so CF's CDN caches it at the edge
+        body = await response.text()
+        return JsResponse.new(
             body,
             {
                 "status": response.status,
@@ -174,5 +160,3 @@ class Default(WorkerEntrypoint):
                 },
             },
         )
-        await cache.put(cache_key, cacheable)
-        return response

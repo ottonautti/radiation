@@ -3,6 +3,9 @@
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Optional
+
+from js import fetch
+
 import mock_fmi
 
 USE_MOCK: bool = False
@@ -101,26 +104,6 @@ def _parse(xml_text: str) -> tuple[list[Station], str]:
 async def fetch_stations() -> tuple[list[Station], str]:
     if USE_MOCK:
         return _parse(mock_fmi.XML)
-
-    from js import fetch, caches, Response as JsResponse
-
-    # Use Cache API so the FMI fetch is shared across isolates
-    cache = caches.default
-    cached = await cache.match(FMI_URL)
-    if cached is not None:
-        return _parse(await cached.text())
     resp = await fetch(FMI_URL)
     xml = await resp.text()
-    await cache.put(
-        FMI_URL,
-        JsResponse.new(
-            xml,
-            {
-                "headers": {
-                    "Content-Type": "text/xml; charset=utf-8",
-                    "Cache-Control": f"public, max-age={TTL}",
-                },
-            },
-        ),
-    )
     return _parse(xml)
