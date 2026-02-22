@@ -1,0 +1,11 @@
+.wrangler
+node_modules
+python_modules
+__pycache__
+CLAUDE.md
+**/uv.lock
+!/uv.lock
+
+.claude/
+.venv/
+cf-python-workers-examples/
