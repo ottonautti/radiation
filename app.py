@@ -6,42 +6,26 @@ Usage (terminal):
   curl localhost:8000/Tampere
 """
 
-import asyncio
-import time
 from typing import Optional
+from urllib.parse import parse_qs, urlparse
 
+import asgi
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse
+from js import Response as JsResponse
+from js import caches
 from workers import WorkerEntrypoint
 
 import fmi
 import geo
 import renderer
 
-# ---------------------------------------------------------------------------
-# Simple in-process cache: refresh FMI data every 5 minutes
-# ---------------------------------------------------------------------------
-_cache_lock = asyncio.Lock()
-_cache_stations: list[fmi.Station] = []
-_cache_ts: float = 0.0
-_cache_data_ts: str = ""
-CACHE_TTL = 300  # seconds
-
 _http_client = httpx.AsyncClient()
 
 app = FastAPI()
 
-
-async def _get_stations() -> tuple[list[fmi.Station], str]:
-    global _cache_stations, _cache_ts, _cache_data_ts
-    async with _cache_lock:
-        if time.monotonic() - _cache_ts > CACHE_TTL:
-            stations, data_ts = await fmi.fetch_stations(_http_client)
-            _cache_stations = stations
-            _cache_ts = time.monotonic()
-            _cache_data_ts = data_ts
-        return _cache_stations, _cache_data_ts
+_UA_TOKENS = ("curl", "wget", "httpie", "http/", "python-httpx", "python-requests")
 
 
 def _wants_colour(request: Request) -> bool:
@@ -107,7 +91,7 @@ async def _handle(request: Request, location: str) -> str:
     err = _ERRORS[lang]
 
     try:
-        stations, data_ts = await _get_stations()
+        stations, data_ts = await fmi.fetch_stations(_http_client)
     except Exception as exc:
         return renderer.render_error(f"{err['fetch_failed']}: {exc}", use_colour, lang)
 
@@ -151,6 +135,35 @@ async def _handle(request: Request, location: str) -> str:
 
 class Default(WorkerEntrypoint):
     async def fetch(self, request):
-        import asgi
         fmi.USE_MOCK = bool(getattr(self.env, "RADIATION_MOCK", False))
-        return await asgi.fetch(app, request.js_object, self.env)
+
+        parsed = urlparse(request.url)
+
+        # Root path is IP-specific; mock responses are ephemeral – skip caching
+        if fmi.USE_MOCK or parsed.path == "/":
+            return await asgi.fetch(app, request.js_object, self.env)
+
+        # Normalise the two dimensions that vary the rendered output
+        qs = parse_qs(parsed.query)
+        lang = qs["lang"][0] if "lang" in qs else "fi"
+        ua = (request.headers.get("User-Agent") or "").lower()
+        colour = "1" if any(tok in ua for tok in _UA_TOKENS) else "0"
+        cache_key = f"https://radiation-cache{parsed.path}?lang={lang}&_c={colour}"
+
+        cache = caches.default
+        cached = await cache.match(cache_key)
+        if cached is not None:
+            return cached
+
+        response = await asgi.fetch(app, request.js_object, self.env)
+
+        body = await response.clone().text()
+        cacheable = JsResponse.new(body, {
+            "status": response.status,
+            "headers": {
+                "Content-Type": "text/plain; charset=utf-8",
+                "Cache-Control": f"public, max-age={fmi.TTL}",
+            },
+        })
+        await cache.put(cache_key, cacheable)
+        return response

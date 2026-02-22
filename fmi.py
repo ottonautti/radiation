@@ -7,6 +7,7 @@ import httpx
 import mock_fmi
 
 USE_MOCK: bool = False
+TTL = 600  # seconds – aligns with FMI's 10-min update cadence
 
 FMI_URL = (
     "https://opendata.fmi.fi/wfs"
@@ -101,6 +102,27 @@ def _parse(xml_text: str) -> tuple[list[Station], str]:
 async def fetch_stations(client: httpx.AsyncClient) -> tuple[list[Station], str]:
     if USE_MOCK:
         return _parse(mock_fmi.XML)
+
+    # In CF Workers, use the Cache API so the FMI fetch is shared across isolates
+    try:
+        from js import caches, Response as JsResponse
+        cache = caches.default
+        cached = await cache.match(FMI_URL)
+        if cached is not None:
+            return _parse(await cached.text())
+        resp = await client.get(FMI_URL, timeout=20)
+        resp.raise_for_status()
+        xml = resp.text
+        await cache.put(FMI_URL, JsResponse.new(xml, {
+            "headers": {
+                "Content-Type": "text/xml; charset=utf-8",
+                "Cache-Control": f"public, max-age={TTL}",
+            },
+        }))
+        return _parse(xml)
+    except ImportError:
+        pass  # local dev without CF runtime
+
     resp = await client.get(FMI_URL, timeout=20)
     resp.raise_for_status()
     return _parse(resp.text)
