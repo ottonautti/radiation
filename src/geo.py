@@ -1,8 +1,9 @@
 """Geolocation utilities: IP lookup, place geocoding, distance."""
 
+import json
 import math
 from typing import Optional
-import httpx
+from urllib.parse import urlencode
 
 from fmi import Station
 
@@ -16,13 +17,15 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
-async def geolocate_ip(ip: str, client: httpx.AsyncClient) -> tuple[Optional[float], Optional[float], str]:
+async def geolocate_ip(ip: str) -> tuple[Optional[float], Optional[float], str]:
     """Return (lat, lon, city) for an IP address, or (None, None, '') on failure."""
     if ip in ("127.0.0.1", "::1", "localhost"):
         return None, None, ""
     try:
-        resp = await client.get(f"http://ip-api.com/json/{ip}", timeout=5)
-        data = resp.json()
+        from js import fetch
+
+        resp = await fetch(f"http://ip-api.com/json/{ip}")
+        data = json.loads(await resp.text())
         if data.get("status") == "success":
             city = data.get("city") or data.get("regionName") or data.get("country", "")
             return data["lat"], data["lon"], city
@@ -31,16 +34,14 @@ async def geolocate_ip(ip: str, client: httpx.AsyncClient) -> tuple[Optional[flo
     return None, None, ""
 
 
-async def geocode_place(place: str, client: httpx.AsyncClient) -> tuple[Optional[float], Optional[float], str]:
+async def geocode_place(place: str) -> tuple[Optional[float], Optional[float], str]:
     """Geocode a place name via Photon (OSM-based), return (lat, lon, display_name)."""
     try:
-        resp = await client.get(
-            "https://photon.komoot.io/api/",
-            params={"q": place, "lang": "en", "limit": 1},
-            headers={"User-Agent": "radiation.wttr / geocode"},
-            timeout=8,
-        )
-        data = resp.json()
+        from js import fetch
+
+        url = "https://photon.komoot.io/api/?" + urlencode({"q": place, "lang": "en", "limit": 1})
+        resp = await fetch(url, {"headers": {"User-Agent": "radiation.wttr / geocode"}})
+        data = json.loads(await resp.text())
         features = data.get("features", [])
         if features:
             coords = features[0]["geometry"]["coordinates"]  # GeoJSON: [lon, lat]
@@ -51,7 +52,9 @@ async def geocode_place(place: str, client: httpx.AsyncClient) -> tuple[Optional
     return None, None, ""
 
 
-def nearest_stations(lat: float, lon: float, stations: list[Station], n: int = 5) -> list[tuple[float, Station]]:
+def nearest_stations(
+    lat: float, lon: float, stations: list[Station], n: int = 5
+) -> list[tuple[float, Station]]:
     """Return list of (distance_km, station) sorted by distance."""
     ranked = sorted(
         ((haversine_km(lat, lon, s.lat, s.lon), s) for s in stations),

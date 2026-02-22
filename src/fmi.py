@@ -3,7 +3,6 @@
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Optional
-import httpx
 import mock_fmi
 
 USE_MOCK: bool = False
@@ -27,8 +26,8 @@ class Station:
     region: str
     lat: float
     lon: float
-    dose_rate: Optional[float]       # µSv/h, 10-min avg
-    uncertainty: Optional[float]     # µSv/h, relative uncertainty
+    dose_rate: Optional[float]  # µSv/h, 10-min avg
+    uncertainty: Optional[float]  # µSv/h, relative uncertainty
 
 
 def _parse(xml_text: str) -> tuple[list[Station], str]:
@@ -66,17 +65,17 @@ def _parse(xml_text: str) -> tuple[list[Station], str]:
     raw = tl.text.strip().split() if tl is not None and tl.text else []
     value_pairs: list[tuple[Optional[float], Optional[float]]] = []
     for i in range(0, len(raw), 2):
+
         def _f(s: str) -> Optional[float]:
             try:
                 return float(s)
             except ValueError:
                 return None
+
         value_pairs.append((_f(raw[i]), _f(raw[i + 1]) if i + 1 < len(raw) else None))
 
     # --- result timestamp ---
-    ts_el = root.find(
-        f".//{{{NS_OM}}}resultTime/{{{NS_GML}}}TimeInstant/{{{NS_GML}}}timePosition"
-    )
+    ts_el = root.find(f".//{{{NS_OM}}}resultTime/{{{NS_GML}}}TimeInstant/{{{NS_GML}}}timePosition")
     data_ts = ts_el.text.strip() if ts_el is not None and ts_el.text else ""
 
     # --- assemble ---
@@ -99,30 +98,29 @@ def _parse(xml_text: str) -> tuple[list[Station], str]:
     return stations, data_ts
 
 
-async def fetch_stations(client: httpx.AsyncClient) -> tuple[list[Station], str]:
+async def fetch_stations() -> tuple[list[Station], str]:
     if USE_MOCK:
         return _parse(mock_fmi.XML)
 
-    # In CF Workers, use the Cache API so the FMI fetch is shared across isolates
-    try:
-        from js import caches, Response as JsResponse
-        cache = caches.default
-        cached = await cache.match(FMI_URL)
-        if cached is not None:
-            return _parse(await cached.text())
-        resp = await client.get(FMI_URL, timeout=20)
-        resp.raise_for_status()
-        xml = resp.text
-        await cache.put(FMI_URL, JsResponse.new(xml, {
-            "headers": {
-                "Content-Type": "text/xml; charset=utf-8",
-                "Cache-Control": f"public, max-age={TTL}",
-            },
-        }))
-        return _parse(xml)
-    except ImportError:
-        pass  # local dev without CF runtime
+    from js import fetch, caches, Response as JsResponse
 
-    resp = await client.get(FMI_URL, timeout=20)
-    resp.raise_for_status()
-    return _parse(resp.text)
+    # Use Cache API so the FMI fetch is shared across isolates
+    cache = caches.default
+    cached = await cache.match(FMI_URL)
+    if cached is not None:
+        return _parse(await cached.text())
+    resp = await fetch(FMI_URL)
+    xml = await resp.text()
+    await cache.put(
+        FMI_URL,
+        JsResponse.new(
+            xml,
+            {
+                "headers": {
+                    "Content-Type": "text/xml; charset=utf-8",
+                    "Cache-Control": f"public, max-age={TTL}",
+                },
+            },
+        ),
+    )
+    return _parse(xml)

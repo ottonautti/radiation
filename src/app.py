@@ -10,27 +10,27 @@ from typing import Optional
 from urllib.parse import parse_qs, urlparse
 
 import asgi
-import httpx
-from fastapi import FastAPI, Request
-from fastapi.responses import PlainTextResponse
 from js import Response as JsResponse
 from js import caches
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import PlainTextResponse
+from starlette.routing import Route
 from workers import WorkerEntrypoint
 
 import fmi
 import geo
 import renderer
 
-_http_client = httpx.AsyncClient()
-
-app = FastAPI()
 
 _UA_TOKENS = ("curl", "wget", "httpie", "http/", "python-httpx", "python-requests")
 
 
 def _wants_colour(request: Request) -> bool:
     ua = request.headers.get("user-agent", "").lower()
-    return any(t in ua for t in ("curl", "wget", "httpie", "http/", "python-httpx", "python-requests"))
+    return any(
+        t in ua for t in ("curl", "wget", "httpie", "http/", "python-httpx", "python-requests")
+    )
 
 
 def _detect_lang(request: Request) -> str:
@@ -70,19 +70,26 @@ _ERRORS = {
 }
 
 
-@app.get("/", response_class=PlainTextResponse)
-async def root(request: Request):
-    return await _handle(request, "")
+async def root(request: Request) -> PlainTextResponse:
+    return PlainTextResponse(await _handle(request, ""))
 
 
-@app.get("/:help", response_class=PlainTextResponse)
-async def help_page(request: Request):
-    return renderer.render_help(_detect_lang(request))
+async def help_page(request: Request) -> PlainTextResponse:
+    return PlainTextResponse(renderer.render_help(_detect_lang(request)))
 
 
-@app.get("/{location:path}", response_class=PlainTextResponse)
-async def location_route(request: Request, location: str):
-    return await _handle(request, location.strip())
+async def location_route(request: Request) -> PlainTextResponse:
+    location = request.path_params.get("location", "").strip()
+    return PlainTextResponse(await _handle(request, location))
+
+
+app = Starlette(
+    routes=[
+        Route("/", root),
+        Route("/:help", help_page),
+        Route("/{location:path}", location_route),
+    ]
+)
 
 
 async def _handle(request: Request, location: str) -> str:
@@ -91,7 +98,7 @@ async def _handle(request: Request, location: str) -> str:
     err = _ERRORS[lang]
 
     try:
-        stations, data_ts = await fmi.fetch_stations(_http_client)
+        stations, data_ts = await fmi.fetch_stations()
     except Exception as exc:
         return renderer.render_error(f"{err['fetch_failed']}: {exc}", use_colour, lang)
 
@@ -103,11 +110,9 @@ async def _handle(request: Request, location: str) -> str:
     label = ""
 
     if location:
-        lat, lon, display = await geo.geocode_place(location, _http_client)
+        lat, lon, display = await geo.geocode_place(location)
         if lat is None:
-            return renderer.render_error(
-                err["geocode_failed"].format(location), use_colour, lang
-            )
+            return renderer.render_error(err["geocode_failed"].format(location), use_colour, lang)
         # Use just the first meaningful part of the Nominatim display name
         label = display.split(",")[0].strip() if display else location
     else:
@@ -119,7 +124,7 @@ async def _handle(request: Request, location: str) -> str:
             label = cf_city or err["your_location"]
         else:
             ip = _client_ip(request)
-            lat, lon, city = await geo.geolocate_ip(ip, _http_client)
+            lat, lon, city = await geo.geolocate_ip(ip)
             if lat is None:
                 lat, lon, label = 60.1699, 24.9384, err["default_location"]
             else:
@@ -132,6 +137,7 @@ async def _handle(request: Request, location: str) -> str:
 # ---------------------------------------------------------------------------
 # Cloudflare Worker entry point
 # ---------------------------------------------------------------------------
+
 
 class Default(WorkerEntrypoint):
     async def fetch(self, request):
@@ -158,12 +164,15 @@ class Default(WorkerEntrypoint):
         response = await asgi.fetch(app, request.js_object, self.env)
 
         body = await response.clone().text()
-        cacheable = JsResponse.new(body, {
-            "status": response.status,
-            "headers": {
-                "Content-Type": "text/plain; charset=utf-8",
-                "Cache-Control": f"public, max-age={fmi.TTL}",
+        cacheable = JsResponse.new(
+            body,
+            {
+                "status": response.status,
+                "headers": {
+                    "Content-Type": "text/plain; charset=utf-8",
+                    "Cache-Control": f"public, max-age={fmi.TTL}",
+                },
             },
-        })
+        )
         await cache.put(cache_key, cacheable)
         return response

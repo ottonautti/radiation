@@ -1,7 +1,8 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "radiation",
-	"main": "app.py",
+	"account_id": "574d1b88490179591207b12c9c717449",
+	"main": "src/app.py",
 	"compatibility_date": "2025-11-02",
 	"compatibility_flags": [
 		"python_workers",
@@ -9,5 +10,11 @@
 	],
 	"observability": {
 		"enabled": true
-	}
+	},
+	"routes": [
+		{
+			"pattern": "priimus.consulting",
+			"custom_domain": true
+		}
+	]
 }

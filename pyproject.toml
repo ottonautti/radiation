@@ -4,12 +4,16 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
     "webtypy==0.1.7",
-    "fastapi==0.129.2",
-    "httpx==0.28.1",
+    "starlette",
 ]
 
 [dependency-groups]
 dev = [
+    "ruff",
     "workers-py",
     "workers-runtime-sdk",
 ]
+
+[tool.ruff]
+src = ["src"]
+line-length = 100
