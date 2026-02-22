@@ -4,6 +4,9 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Optional
 import httpx
+import mock_fmi
+
+USE_MOCK: bool = False
 
 FMI_URL = (
     "https://opendata.fmi.fi/wfs"
@@ -96,6 +99,8 @@ def _parse(xml_text: str) -> tuple[list[Station], str]:
 
 
 async def fetch_stations(client: httpx.AsyncClient) -> tuple[list[Station], str]:
+    if USE_MOCK:
+        return _parse(mock_fmi.XML)
     resp = await client.get(FMI_URL, timeout=20)
     resp.raise_for_status()
     return _parse(resp.text)

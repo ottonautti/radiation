@@ -56,7 +56,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "fi": {
         "title": "Säteilyraportti",
         "source": "Lähde: STUK / FMI OpenData  (10 min keskiarvo annosnopeus)",
-        "data_ts": "Tietojen aikaleima",
+        "data_ts": "Mittaustietojen aikaleima",
         "nearest_station": "Lähin asema",
         "region": "Alue",
         "distance": "Etäisyys",
@@ -68,7 +68,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "col_dist": "Etäis.",
         "col_dose": "Annosnopeus",
         "col_status": "Tila",
-        "context": "Normaali taustasäteily Suomessa: 0.04 – 0.30 µSv/h  |  Keuhkoröntgen ≈ 0,1 µSv",
+        "context": "Normaali taustasäteily Suomessa: 0.04 – 0.30 µSv/h, keuhkoröntgen ≈ 0,1 µSv",
         "level_normal": "normaali",
         "level_elevated": "kohonnut",
         "level_high": "KORKEA",
@@ -79,7 +79,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "en": {
         "title": "Radiation Report",
         "source": "Source: STUK / FMI OpenData  (10-min avg dose rate)",
-        "data_ts": "Data timestamp",
+        "data_ts": "Measurement timestamp",
         "nearest_station": "Nearest station",
         "region": "Region",
         "distance": "Distance",
@@ -91,7 +91,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "col_dist": "Dist",
         "col_dose": "Dose rate",
         "col_status": "Status",
-        "context": "Normal Finnish background: 0.04 – 0.30 µSv/h  |  Chest X-ray ≈ 0.1 µSv",
+        "context": "Normal Finnish background: 0.04 – 0.30 µSv/h, chest X-ray ≈ 0.1 µSv",
         "level_normal": "normal",
         "level_elevated": "elevated",
         "level_high": "HIGH",
@@ -130,10 +130,10 @@ def _level_colour(level: str, text: str, c: bool) -> str:
 
 
 def _bar(dr: Optional[float], width: int = 20, use_colour: bool = True) -> str:
-    """ASCII bar chart scaled to 0.60 µSv/h = full bar."""
+    """ASCII bar chart scaled to HIGH_MIN."""
     if dr is None:
         return "?" * width
-    scale = 0.60
+    scale = HIGH_MIN
     filled = min(int(round(dr / scale * width)), width)
     empty = width - filled
     bar = "█" * filled + "░" * empty
@@ -182,16 +182,19 @@ def render(
     level_disp = _level_display(level, lang)
     level_str = _level_colour(level, level_disp.upper(), c)
 
-    lines.append(f"  {t('nearest_station', lang)}:  {_bold(nearest.name, c)}")
+    w1 = max(len(t(k, lang)) for k in ("nearest_station", "region", "distance")) + 3
+    w2 = max(len(t(k, lang)) for k in ("dose_rate", "level")) + 4
+
+    lines.append(f"  {t('nearest_station', lang) + ':':<{w1}}{_bold(nearest.name, c)}")
     if nearest.region and nearest.region != nearest.name:
-        lines.append(f"  {t('region', lang)}:           {nearest.region}")
-    lines.append(f"  {t('distance', lang)}:         {nearest_dist:.1f} {t('km', lang)}")
+        lines.append(f"  {t('region', lang) + ':':<{w1}}{nearest.region}")
+    lines.append(f"  {t('distance', lang) + ':':<{w1}}{nearest_dist:.1f} {t('km', lang)}")
     lines.append("")
 
     dr_str = _fmt_dr(nearest.dose_rate, nearest.uncertainty, c)
-    lines.append(f"  {t('dose_rate', lang)}:   {_bold(dr_str, c)}")
-    lines.append(f"  {t('level', lang)}:       {level_str}")
-    lines.append(f"  {_bar(nearest.dose_rate, width=30, use_colour=c)}  0.60 µSv/h")
+    lines.append(f"  {t('dose_rate', lang) + ':':<{w2}}{_bold(dr_str, c)}")
+    lines.append(f"  {t('level', lang) + ':':<{w2}}{level_str}")
+    lines.append(f"  {_bar(nearest.dose_rate, width=30, use_colour=c)}  {HIGH_MIN} µSv/h")
     lines.append("")
 
     # Nearby stations table

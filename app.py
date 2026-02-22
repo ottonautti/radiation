@@ -152,4 +152,5 @@ async def _handle(request: Request, location: str) -> str:
 class Default(WorkerEntrypoint):
     async def fetch(self, request):
         import asgi
+        fmi.USE_MOCK = bool(getattr(self.env, "RADIATION_MOCK", False))
         return await asgi.fetch(app, request.js_object, self.env)

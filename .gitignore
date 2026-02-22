@@ -1,4 +1,5 @@
 .wrangler
+.dev.vars
 node_modules
 python_modules
 __pycache__
