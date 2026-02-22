@@ -1,0 +1,31 @@
+
+  ☢  Suomen säteilymonitori
+  Annosnopeus STUK / FMI OpenData:sta · 253 asemaa · 10 min keskiarvot
+
+Käyttö:
+
+    $ curl radiation.wttr.in             # sijaintisi perusteella
+    $ curl radiation.wttr.in/Helsinki    # paikkakunnan mukaan
+    $ curl radiation.wttr.in/Nuijamaa
+
+Annosnopeuden tasot:
+
+    normaali   < 0.40 µSv/h
+    kohonnut   0.40 – 1.00 µSv/h
+    KORKEA     > 1.00 µSv/h
+
+    (tyypillinen suomalainen taustasäteily: 0.04 – 0.30 µSv/h)
+
+Vertailuannokset:
+
+    Keuhkoröntgen              ≈ 0,10 µSv
+    Helsinki–Lontoo lento      ≈ 20   µSv
+    Vuosiraja (yleisö)         ≈ 1 000 µSv/vuosi
+
+Erikoissivut:
+
+    /:help       # tämä sivu
+    /?lang=en    # vaihda englanniksi
+
+  Lähde:  https://opendata.fmi.fi  ·  https://www.stuk.fi
+

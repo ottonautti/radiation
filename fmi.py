@@ -12,6 +12,7 @@ FMI_URL = (
 )
 
 NS_GML = "http://www.opengis.net/gml/3.2"
+NS_OM = "http://www.opengis.net/om/2.0"
 NS_TARGET = "http://xml.fmi.fi/namespace/om/atmosphericfeatures/1.1"
 
 
@@ -26,7 +27,7 @@ class Station:
     uncertainty: Optional[float]     # µSv/h, relative uncertainty
 
 
-def _parse(xml_text: str) -> list[Station]:
+def _parse(xml_text: str) -> tuple[list[Station], str]:
     root = ET.fromstring(xml_text)
 
     # --- station metadata ---
@@ -68,6 +69,12 @@ def _parse(xml_text: str) -> list[Station]:
                 return None
         value_pairs.append((_f(raw[i]), _f(raw[i + 1]) if i + 1 < len(raw) else None))
 
+    # --- result timestamp ---
+    ts_el = root.find(
+        f".//{{{NS_OM}}}resultTime/{{{NS_GML}}}TimeInstant/{{{NS_GML}}}timePosition"
+    )
+    data_ts = ts_el.text.strip() if ts_el is not None and ts_el.text else ""
+
     # --- assemble ---
     stations: list[Station] = []
     for idx, fmisid in enumerate(ordered_ids):
@@ -85,10 +92,10 @@ def _parse(xml_text: str) -> list[Station]:
                 uncertainty=unc,
             )
         )
-    return stations
+    return stations, data_ts
 
 
-async def fetch_stations(client: httpx.AsyncClient) -> list[Station]:
+async def fetch_stations(client: httpx.AsyncClient) -> tuple[list[Station], str]:
     resp = await client.get(FMI_URL, timeout=20)
     resp.raise_for_status()
     return _parse(resp.text)

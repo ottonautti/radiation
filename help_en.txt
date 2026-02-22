@@ -1,0 +1,31 @@
+
+  ☢  Finnish Radiation Monitor
+  Dose rate data from STUK / FMI OpenData · 253 stations · 10-min averages
+
+Usage:
+
+    $ curl radiation.wttr.in           # your location
+    $ curl radiation.wttr.in/Helsinki  # by municipality name
+    $ curl radiation.wttr.in/Nuijamaa
+
+Dose rate levels:
+
+    normal    < 0.40 µSv/h
+    elevated  0.40 – 1.00 µSv/h
+    HIGH      > 1.00 µSv/h
+
+    (typical Finnish background radiation: 0.04 – 0.30 µSv/h)
+
+Reference doses:
+
+    Chest X-ray              ≈ 0.10 µSv
+    Helsinki–London flight   ≈ 20   µSv
+    Annual limit (public)    ≈ 1 000 µSv/year
+
+Special pages:
+
+    /:help       # this page
+    /?lang=fi    # vaihda suomeksi
+
+  Source:  https://opendata.fmi.fi  ·  https://www.stuk.fi
+
