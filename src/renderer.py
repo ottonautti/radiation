@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Optional
+
 from fmi import Station
 
 _HERE = Path(__file__).parent
@@ -49,7 +50,7 @@ HIGH_MIN = 1.00
 # ---------------------------------------------------------------------------
 
 STRINGS: dict[str, dict[str, str]] = {
-    "fi": {
+    "fi":
         "title": "Säteilyraportti",
         "source": "Lähde: STUK / FMI OpenData  (10 min keskiarvo annosnopeus)",
         "data_ts": "Mittaustietojen aikaleima",
@@ -64,14 +65,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "col_dist": "Etäis.",
         "col_dose": "Annosnopeus",
         "col_status": "Tila",
-        "context": "Normaali taustasäteily Suomessa: 0.04 – 0.30 µSv/h, keuhkoröntgen ≈ 0,1 µSv",
+        "context": "Normaali taustasäteily Suomessa: 0.04 – 0.30 µSv/h, keuhkoröntgen ≈ 0.1 µSv",
         "level_normal": "normaali",
         "level_elevated": "kohonnut",
         "level_high": "KORKEA",
         "level_unknown": "tuntematon",
         "error_prefix": "Virhe",
         "km": "km",
-    },
+    ,
     "en": {
         "title": "Radiation Report",
         "source": "Source: STUK / FMI OpenData  (10-min avg dose rate)",
@@ -190,7 +191,8 @@ def render(
     dr_str = _fmt_dr(nearest.dose_rate, nearest.uncertainty, c)
     lines.append(f"  {t('dose_rate', lang) + ':':<{w2}}{_bold(dr_str, c)}")
     lines.append(f"  {t('level', lang) + ':':<{w2}}{level_str}")
-    lines.append(f"  {_bar(nearest.dose_rate, width=30, use_colour=c)}  {HIGH_MIN} µSv/h")
+    bar_prefix = " " * (2 + w2)
+    lines.append(f"{bar_prefix}{_bar(nearest.dose_rate, width=20, use_colour=c)}  {HIGH_MIN} µSv/h")
     lines.append("")
 
     # Nearby stations table
